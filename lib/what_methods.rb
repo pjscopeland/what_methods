@@ -28,6 +28,7 @@ class Object
     WhatMethods::MethodFinder.show(self, *a)
   end
   alias_method :__clone__, :clone
+
   def clone
     __clone__
   rescue TypeError
@@ -42,38 +43,43 @@ end
 
 module WhatMethods
   class MethodFinder
-    @@blacklist = %w(daemonize display exec exit! fork sleep system syscall what? ed emacs mate nano vi vim)
+    @@blacklist = %w(daemonize display exec exit! fork sleep system syscall what? ed emacs mate nano vi vim pry)
     
-    def initialize( obj, *args )
+    def initialize(obj, *args)
       @obj = obj
       @args = args
     end
-    def ==( val )
-      MethodFinder.show( @obj, val, *@args )
+
+    def ==(val)
+      MethodFinder.show(@obj, val, *@args)
     end
     
     # Find all methods on [anObject] which, when called with [args] return [expectedResult]
-    def self.find( anObject, expectedResult, *args, &block )
+    def self.find(anObject, expectedResult, *args, &block)
       stdout, stderr = $stdout, $stderr
       $stdout = $stderr = DummyOut.new
       # change this back to == if you become worried about speed and warnings.
       res = anObject.methods.
             select { |name| anObject.method(name).arity <= args.size }.
-            select { |name| not @@blacklist.include? name }.
-            select { |name| begin 
-                     anObject.clone.method( name ).call( *args, &block ) == expectedResult; 
-                     rescue Object; end }
+            reject { |name| @@blacklist.include? name }.
+            select do |name|
+              begin 
+                anObject.clone.method(name).call(*args, &block) == expectedResult
+              rescue
+                false
+              end
+            end
       $stdout, $stderr = stdout, stderr
       res
     end
     
     # Pretty-prints the results of the previous method
-    def self.show( anObject, expectedResult, *args, &block)
-      find( anObject, expectedResult, *args, &block).each { |name|
+    def self.show(anObject, expectedResult, *args, &block)
+      find(anObject, expectedResult, *args, &block).each do |name|
         print "#{anObject.inspect}.#{name}" 
-        print "(" + args.map { |o| o.inspect }.join(", ") + ")" unless args.empty?
+        print "(#{args.map(&:inspect).join(", ")})" unless args.empty?
         puts " == #{expectedResult.inspect}" 
-      }
+      end
     end
   end
 end
